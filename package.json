@@ -1,0 +1,39 @@
+{
+  "type": "module",
+  "name": "enjz-api",
+  "version": "1.0.0",
+  "description": "an api for sudan service plafrom ",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "app": "node app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bish87/enjz-api.git"
+  },
+  "author": "bish87",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bish87/enjz-api/issues"
+  },
+  "homepage": "https://github.com/bish87/enjz-api#readme",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "express-session": "^1.19.0",
+    "express-sessions": "^1.0.1",
+    "jsonwebtoken": "^9.0.3",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.1"
+  }
+}
