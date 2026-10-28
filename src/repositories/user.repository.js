@@ -33,3 +33,22 @@ export function findUserById(id) {
     }
   });
 }
+
+export function updateUserProfile (id, data) {
+  return prisma.user.update({
+    where: {
+      id
+    },
+    data,
+    select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+        city: true,
+        role: true,
+        createdAt: true
+    }
+  })
+}
