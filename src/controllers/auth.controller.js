@@ -50,13 +50,14 @@ export function login(req, res, next) {
 export async function register(req, res, next) {
   try {
     const user = await registerUser(req.body);
-    const token = user.status === "ACTIVE" ? generateToken(user) : null;
+    const token = generateToken(user);
 
     return res.status(201).json({
       user: publicUser(user),
       token,
-      ...(user.status === "PENDING" && {
-        message: "Provider account created and pending admin approval",
+      ...(user.role === "PROVIDER" && {
+        message:
+          "Provider account created. Complete your profile and wait for admin verification.",
       }),
     });
   } catch (error) {

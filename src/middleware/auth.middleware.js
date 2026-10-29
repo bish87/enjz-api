@@ -84,12 +84,17 @@ export function errorHandler(err, req, res, next) {
 
   const status =
     err.status ||
-    (err.code === "P2002" ? 409 : err.code === "P2025" ? 404 : 500);
+    (err.code === "P2002" ? 409 : err.code === "P2025" ? 404 : err.code === "P2003" ? 409 : 500);
 
-  const message =
-    status >= 500 && env.NODE_ENV === "production"
-      ? "Internal server error"
-      : err.message || "Internal server error";
+  let message = err.message || "Internal server error";
+
+  if (err.code === "P2002") {
+    message = "Resource already exists";
+  } else if (err.code === "P2003") {
+    message = "Resource is still in use";
+  } else if (status >= 500 && env.NODE_ENV === "production") {
+    message = "Internal server error";
+  }
 
   return res.status(status).json({ message });
 }

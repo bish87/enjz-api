@@ -66,6 +66,8 @@ model ProviderProfile {
   startingPrice      Int?
   isAvailable        Boolean            @default(true)
   verificationStatus VerificationStatus @default(PENDING)
+  verificationNote   String?
+  verifiedAt         DateTime?
   ratingAvg          Float              @default(0)
   ratingCount        Int                @default(0)
   createdAt          DateTime           @default(now())

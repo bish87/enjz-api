@@ -1,19 +1,25 @@
-import { prisma } from "../config/prisma.js"
+import { prisma } from "../config/prisma.js";
 
-export function getCategoryByName (name) {
-    return prisma.category.findFirst({
-        where: { name }
-    })
+export function getCategoryByName(name) {
+  return prisma.category.findFirst({
+    where: { name },
+  });
 }
 
-export function createCategory (data) {
+export function findCategories() {
+  return prisma.category.findMany({
+    orderBy: { name: "asc" },
+  });
+}
+
+export function createCategory(data) {
   return prisma.category.create({
-    data
-  })
+    data,
+  });
 }
 
-export function deleteCategory (id) {
-    return prisma.category.delete({
-        where: { id }
-    })
+export function deleteCategory(id) {
+  return prisma.category.delete({
+    where: { id },
+  });
 }

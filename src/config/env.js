@@ -8,6 +8,15 @@ const envSchema = z.object({
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET must be at least 32 characters long"),
+  CORS_ORIGINS: z
+    .string()
+    .default("http://localhost:5173,http://127.0.0.1:5173")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    ),
 });
 
 const parsed = envSchema.safeParse(process.env);

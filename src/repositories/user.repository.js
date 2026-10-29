@@ -26,10 +26,20 @@ export function findUserByEmail(email) {
   });
 }
 
-export function createUser(data) {
-  return prisma.user.create({
-    data,
-    select: publicUserSelect,
+export function createUser(data, { createProviderProfile = false } = {}) {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data,
+      select: publicUserSelect,
+    });
+
+    if (createProviderProfile) {
+      await tx.providerProfile.create({
+        data: { userId: user.id },
+      });
+    }
+
+    return user;
   });
 }
 

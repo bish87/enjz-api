@@ -19,16 +19,19 @@ export async function registerUser(data) {
 
   const passwordHash = await bcrypt.hash(data.password, 10);
 
-  const user = await createUser({
-    firstName: data.firstName,
-    lastName: data.lastName,
-    phone: data.phone,
-    email: data.email,
-    city: data.city,
-    passwordHash,
-    role: data.role,
-    status: data.role === "PROVIDER" ? "PENDING" : "ACTIVE",
-  });
+  const user = await createUser(
+    {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone,
+      email: data.email,
+      city: data.city,
+      passwordHash,
+      role: data.role,
+      status: "ACTIVE",
+    },
+    { createProviderProfile: data.role === "PROVIDER" }
+  );
 
   return user;
 }
