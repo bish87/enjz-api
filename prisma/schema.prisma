@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -24,17 +22,142 @@ enum UserStatus {
   PENDING
 }
 
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+  CANCELLED
+}
+
 model User {
-  id             Int           @id @default(autoincrement())
-  firstName      String
-  lastName       String?
-  phone          String        @unique
-  email          String        @unique
-  passwordHash   String 
-  avatar         String?
-  city           String
-  role           UserRole      @default(CUSTOMER)
-  status         UserStatus    @default(PENDING)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id           Int        @id @default(autoincrement())
+  firstName    String
+  lastName     String?
+  phone        String     @unique
+  email        String?    @unique
+  passwordHash String
+  avatar       String?
+  city         String
+  role         UserRole   @default(CUSTOMER)
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  providerProfile  ProviderProfile?
+  customerBookings Booking[]        @relation("CustomerBookings")
+  providerBookings Booking[]        @relation("ProviderBookings")
+  reviews          Review[]         @relation("CustomerReviews")
+  receivedReviews  Review[]         @relation("ProviderReviews")
+}
+
+model ProviderProfile {
+  id                 Int                @id @default(autoincrement())
+  userId             Int                @unique
+  bio                String?
+  experienceYears    Int?
+  startingPrice      Int?
+  isAvailable        Boolean            @default(true)
+  verificationStatus VerificationStatus @default(PENDING)
+  ratingAvg          Float              @default(0)
+  ratingCount        Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories ProviderCategory[]
+  areas      ProviderArea[]
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  providers ProviderCategory[]
+  bookings  Booking[]
+}
+
+model Area {
+  id    Int    @id @default(autoincrement())
+  name  String
+  state String
+
+  providers ProviderArea[]
+  bookings  Booking[]
+
+  @@unique([name, state])
+}
+
+model ProviderCategory {
+  providerId Int
+  categoryId Int
+  price      Int?
+
+  provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, categoryId])
+  @@index([categoryId])
+}
+
+model ProviderArea {
+  providerId Int
+  areaId     Int
+
+  provider ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  area     Area            @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, areaId])
+  @@index([areaId])
+}
+
+model Booking {
+  id              Int           @id @default(autoincrement())
+  customerId      Int
+  providerId      Int
+  categoryId      Int
+  areaId          Int
+  address         String
+  description     String
+  scheduledAt     DateTime
+  status          BookingStatus @default(PENDING)
+  agreedPrice     Int?
+  cancelledReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer User     @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  provider User     @relation("ProviderBookings", fields: [providerId], references: [id], onDelete: Restrict)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  area     Area     @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  review   Review?
+
+  @@index([providerId, status])
+  @@index([customerId, status])
+  @@index([scheduledAt])
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int      @unique
+  customerId Int
+  providerId Int
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  booking  Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer User    @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  provider User    @relation("ProviderReviews", fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@index([providerId])
+  @@index([customerId])
 }

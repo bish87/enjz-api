@@ -1,0 +1,19 @@
+import { prisma } from "../config/prisma.js"
+
+export function getCategoryByName (name) {
+    return prisma.category.findFirst({
+        where: { name }
+    })
+}
+
+export function createCategory (data) {
+  return prisma.category.create({
+    data
+  })
+}
+
+export function deleteCategory (id) {
+    return prisma.category.delete({
+        where: { id }
+    })
+}
