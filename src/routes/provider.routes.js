@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getProviderReviews } from "../controllers/review.controller.js";
 import {
   getMyProvider,
   getProvider,
@@ -16,6 +17,7 @@ import {
   providerListQuerySchema,
   updateProviderSchema,
 } from "../validation/provider.schema.js";
+import { reviewListQuerySchema } from "../validation/review.schema.js";
 
 const router = Router();
 
@@ -42,6 +44,13 @@ router.put(
   authorize("PROVIDER"),
   validate(providerAreasSchema),
   updateMyProviderAreas
+);
+
+router.get(
+  "/:id/reviews",
+  validate(idParamSchema, "params"),
+  validate(reviewListQuerySchema, "query"),
+  getProviderReviews
 );
 
 router.get("/:id", validate(idParamSchema, "params"), getProvider);

@@ -4,6 +4,7 @@ import {
   verifyAdminProvider,
 } from "../controllers/admin.provider.controller.js";
 import { listAdminBookings } from "../controllers/booking.controller.js";
+import { removeReview } from "../controllers/review.controller.js";
 import { authenticate, authorize } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { idParamSchema } from "../validation/common.schema.js";
@@ -34,5 +35,7 @@ router.get(
   validate(adminBookingListQuerySchema, "query"),
   listAdminBookings
 );
+
+router.delete("/reviews/:id", validate(idParamSchema, "params"), removeReview);
 
 export default router;

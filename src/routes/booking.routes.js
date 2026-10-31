@@ -8,9 +8,11 @@ import {
   listMyBookingsHandler,
   newBooking,
 } from "../controllers/booking.controller.js";
+import { newReview } from "../controllers/review.controller.js";
 import { authenticate, authorize } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { idParamSchema } from "../validation/common.schema.js";
+import { createReviewSchema } from "../validation/review.schema.js";
 import {
   acceptBookingSchema,
   bookingListQuerySchema,
@@ -60,6 +62,14 @@ router.patch(
   validate(idParamSchema, "params"),
   validate(bookingReasonSchema),
   cancelBookingHandler
+);
+
+router.post(
+  "/:id/review",
+  authorize("CUSTOMER"),
+  validate(idParamSchema, "params"),
+  validate(createReviewSchema),
+  newReview
 );
 
 router.get("/:id", validate(idParamSchema, "params"), getBookingHandler);
