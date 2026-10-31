@@ -86,7 +86,9 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${categories.length} categories and ${areas.length} areas`);
+  console.log(
+    `Seeded ${categories.length} categories and ${areas.length} areas`
+  );
 }
 
 main()

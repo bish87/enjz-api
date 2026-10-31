@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import {
   createProvider,
   createUser,
-  nextPhone,
   resetDb,
   seedBase,
 } from "../helpers/db.js";
@@ -84,7 +83,7 @@ describe("public provider discovery", () => {
       categories: [fixtures.categories.cleaning],
       areas: [fixtures.areas.omdurman],
     });
-    const pending = await createProvider({
+    await createProvider({
       verified: false,
       categories: [fixtures.categories.plumbing],
       areas: [fixtures.areas.khartoum],
@@ -199,11 +198,7 @@ describe("provider self-service", () => {
 
   it("resets a rejected provider to pending after an edit", async () => {
     const { user } = await createProvider({ verified: false });
-    const rejected = await verifyProvider(
-      user.id,
-      "REJECTED",
-      "Add portfolio"
-    );
+    const rejected = await verifyProvider(user.id, "REJECTED", "Add portfolio");
 
     assert.equal(rejected.body.provider.verificationStatus, "REJECTED");
     assert.equal(rejected.body.provider.verificationNote, "Add portfolio");
@@ -257,7 +252,9 @@ describe("provider self-service", () => {
     const duplicate = await agent
       .put("/api/v1/providers/me/areas")
       .set("Authorization", auth)
-      .send({ areaIds: [fixtures.areas.omdurman.id, fixtures.areas.omdurman.id] });
+      .send({
+        areaIds: [fixtures.areas.omdurman.id, fixtures.areas.omdurman.id],
+      });
     assert.equal(duplicate.status, 400);
   });
 });

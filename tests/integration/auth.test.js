@@ -12,11 +12,9 @@ import {
 } from "../helpers/db.js";
 import { http, login } from "../helpers/http.js";
 
-let fixtures;
-
 beforeEach(async () => {
   await resetDb();
-  fixtures = await seedBase();
+  await seedBase();
 });
 
 async function register(overrides = {}) {
@@ -77,10 +75,7 @@ describe("POST /auth/register", () => {
   });
 
   it("rejects duplicate emails case-insensitively with 409", async () => {
-    assert.equal(
-      (await register({ email: "clash@example.com" })).status,
-      201
-    );
+    assert.equal((await register({ email: "clash@example.com" })).status, 201);
 
     const duplicate = await register({ email: "CLASH@example.com" });
     assert.equal(duplicate.status, 409);
@@ -142,9 +137,11 @@ describe("authentication middleware", () => {
       401
     );
     assert.equal(
-      (await agent
-        .get("/api/v1/auth/me")
-        .set("Authorization", "Bearer not-a-jwt")).status,
+      (
+        await agent
+          .get("/api/v1/auth/me")
+          .set("Authorization", "Bearer not-a-jwt")
+      ).status,
       401
     );
   });
@@ -201,17 +198,21 @@ describe("PATCH /users/profile", () => {
     const auth = `Bearer ${loginResponse.body.token}`;
 
     assert.equal(
-      (await agent
-        .patch("/api/v1/users/profile")
-        .set("Authorization", auth)
-        .send({ role: "ADMIN" })).status,
+      (
+        await agent
+          .patch("/api/v1/users/profile")
+          .set("Authorization", auth)
+          .send({ role: "ADMIN" })
+      ).status,
       400
     );
     assert.equal(
-      (await agent
-        .patch("/api/v1/users/profile")
-        .set("Authorization", auth)
-        .send({})).status,
+      (
+        await agent
+          .patch("/api/v1/users/profile")
+          .set("Authorization", auth)
+          .send({})
+      ).status,
       400
     );
   });

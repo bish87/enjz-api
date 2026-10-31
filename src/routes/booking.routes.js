@@ -22,9 +22,18 @@ const router = Router();
 
 router.use(authenticate);
 
-router.post("/", authorize("CUSTOMER"), validate(createBookingSchema), newBooking);
+router.post(
+  "/",
+  authorize("CUSTOMER"),
+  validate(createBookingSchema),
+  newBooking
+);
 
-router.get("/me", validate(bookingListQuerySchema, "query"), listMyBookingsHandler);
+router.get(
+  "/me",
+  validate(bookingListQuerySchema, "query"),
+  listMyBookingsHandler
+);
 
 router.patch(
   "/:id/accept",

@@ -7,6 +7,11 @@ import { updateProfileSchema } from "../validation/auth.schema.js";
 const router = Router();
 
 router.get("/profile", authenticate, getProfile);
-router.patch("/profile", authenticate, validate(updateProfileSchema), patchProfile);
+router.patch(
+  "/profile",
+  authenticate,
+  validate(updateProfileSchema),
+  patchProfile
+);
 
 export default router;

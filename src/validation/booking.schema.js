@@ -20,11 +20,7 @@ export const createBookingSchema = z
     categoryId: z.coerce.number().int().positive(),
     areaId: z.coerce.number().int().positive(),
     address: z.string().trim().min(5, "Address is too short").max(255),
-    description: z
-      .string()
-      .trim()
-      .min(5, "Description is too short")
-      .max(1000),
+    description: z.string().trim().min(5, "Description is too short").max(1000),
     scheduledAt: isoDate,
   })
   .strict();

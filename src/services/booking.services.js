@@ -98,7 +98,9 @@ export async function createBooking(user, data) {
     throw new ConflictError("Provider is currently unavailable");
   }
 
-  if (!profile.categories.some((item) => item.category.id === data.categoryId)) {
+  if (
+    !profile.categories.some((item) => item.category.id === data.categoryId)
+  ) {
     throw new ValidationError("Provider does not offer this category");
   }
 
@@ -136,8 +138,7 @@ export async function listMyBookings(user, query) {
     throw new ForbiddenError("Only customers and providers have bookings");
   }
 
-  const revealContact = (booking) =>
-    CONTACT_STATUSES.includes(booking.status);
+  const revealContact = (booking) => CONTACT_STATUSES.includes(booking.status);
 
   return {
     data: result.bookings.map((booking) =>
@@ -161,18 +162,24 @@ async function transition(booking, user, fromStatuses, data) {
   });
 
   if (count === 0) {
-    throw new ConflictError("Booking is not in a state that allows this action");
+    throw new ConflictError(
+      "Booking is not in a state that allows this action"
+    );
   }
 
   const updated = await findBookingById(booking.id);
-  return toBooking(updated, { revealContact: CONTACT_STATUSES.includes(updated.status) });
+  return toBooking(updated, {
+    revealContact: CONTACT_STATUSES.includes(updated.status),
+  });
 }
 
 export async function acceptBooking(user, id, data) {
   const booking = await getOwnedBooking(id, user);
 
   if (booking.providerId !== user.id) {
-    throw new ForbiddenError("Only the assigned provider can accept this booking");
+    throw new ForbiddenError(
+      "Only the assigned provider can accept this booking"
+    );
   }
 
   return transition(booking, user, ["PENDING"], {
@@ -185,7 +192,9 @@ export async function declineBooking(user, id, data) {
   const booking = await getOwnedBooking(id, user);
 
   if (booking.providerId !== user.id) {
-    throw new ForbiddenError("Only the assigned provider can decline this booking");
+    throw new ForbiddenError(
+      "Only the assigned provider can decline this booking"
+    );
   }
 
   return transition(booking, user, ["PENDING"], {

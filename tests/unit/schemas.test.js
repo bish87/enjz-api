@@ -23,7 +23,10 @@ const validRegistration = {
 describe("registerSchema", () => {
   it("normalizes local, +249 and 249 phone formats", () => {
     for (const input of ["0912345678", "+249912345678", "249912345678"]) {
-      const result = registerSchema.parse({ ...validRegistration, phone: input });
+      const result = registerSchema.parse({
+        ...validRegistration,
+        phone: input,
+      });
       assert.equal(result.phone, "+249912345678");
     }
   });
@@ -69,7 +72,8 @@ describe("registerSchema", () => {
       false
     );
     assert.equal(
-      registerSchema.safeParse({ ...validRegistration, phone: "12345" }).success,
+      registerSchema.safeParse({ ...validRegistration, phone: "12345" })
+        .success,
       false
     );
     assert.equal(
@@ -135,8 +139,14 @@ describe("provider schemas", () => {
   });
 
   it("caps pagination at 50", () => {
-    assert.equal(providerListQuerySchema.safeParse({ limit: "51" }).success, false);
-    assert.equal(providerListQuerySchema.safeParse({ page: "0" }).success, false);
+    assert.equal(
+      providerListQuerySchema.safeParse({ limit: "51" }).success,
+      false
+    );
+    assert.equal(
+      providerListQuerySchema.safeParse({ page: "0" }).success,
+      false
+    );
   });
 
   it("validates profile updates", () => {

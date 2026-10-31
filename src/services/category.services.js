@@ -4,7 +4,11 @@ import {
   findCategories,
   getCategoryByName,
 } from "../repositories/category.repository.js";
-import { ConflictError, NotFoundError, ValidationError } from "../utils/errors.js";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "../utils/errors.js";
 
 export function listCategories() {
   return findCategories();

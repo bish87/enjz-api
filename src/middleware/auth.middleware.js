@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { logger } from "../config/logger.js";
 import { findUserById } from "../repositories/user.repository.js";
 
 export async function authenticate(req, res, next) {
@@ -82,10 +83,16 @@ export function errorHandler(err, req, res, next) {
 
   const status =
     err.status ||
-    (err.code === "P2002" ? 409 : err.code === "P2025" ? 404 : err.code === "P2003" ? 409 : 500);
+    (err.code === "P2002"
+      ? 409
+      : err.code === "P2025"
+        ? 404
+        : err.code === "P2003"
+          ? 409
+          : 500);
 
   if (status >= 500) {
-    console.error(err);
+    logger.error({ err }, "unhandled request error");
   }
 
   let message = err.message || "Internal server error";

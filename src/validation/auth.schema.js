@@ -18,7 +18,11 @@ const sudanPhone = z
   });
 
 const optionalEmail = z
-  .union([z.string().trim().toLowerCase().email("Invalid email"), z.literal(""), z.null()])
+  .union([
+    z.string().trim().toLowerCase().email("Invalid email"),
+    z.literal(""),
+    z.null(),
+  ])
   .optional()
   .transform((value) => value || null);
 
@@ -52,7 +56,12 @@ export const loginSchema = z
 
 export const updateProfileSchema = z
   .object({
-    firstName: z.string().trim().min(1, "First name cannot be empty").max(50).optional(),
+    firstName: z
+      .string()
+      .trim()
+      .min(1, "First name cannot be empty")
+      .max(50)
+      .optional(),
     lastName: z
       .string()
       .trim()

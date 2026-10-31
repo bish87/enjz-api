@@ -1,4 +1,7 @@
-import { findUserById, updateUserProfile } from "../repositories/user.repository.js";
+import {
+  findUserById,
+  updateUserProfile,
+} from "../repositories/user.repository.js";
 
 export async function getProfile(req, res, next) {
   try {

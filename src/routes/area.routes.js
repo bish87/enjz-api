@@ -12,7 +12,13 @@ import { areaListQuerySchema, areaSchema } from "../validation/area.schema.js";
 const router = Router();
 
 router.get("/", validate(areaListQuerySchema, "query"), getAreas);
-router.post("/", authenticate, authorize("ADMIN"), validate(areaSchema), newArea);
+router.post(
+  "/",
+  authenticate,
+  authorize("ADMIN"),
+  validate(areaSchema),
+  newArea
+);
 router.delete(
   "/:id",
   authenticate,

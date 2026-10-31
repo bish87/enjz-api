@@ -13,7 +13,9 @@ export async function http() {
 }
 
 export async function login(phone, password = "Passw0rd!") {
-  const response = await (await http())
+  const response = await (
+    await http()
+  )
     .post("/api/v1/auth/login")
     .send({ phone, password });
 

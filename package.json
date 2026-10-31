@@ -13,6 +13,10 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "pretest": "node tests/prepare-db.js",
     "test": "node --test --test-concurrency=1 tests/unit/*.test.js tests/integration/*.test.js"
   },
@@ -30,19 +34,30 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "bcrypt": "^6.0.0",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
-    "express-session": "^1.19.0",
-    "express-sessions": "^1.0.1",
+    "express-rate-limit": "^8.7.2",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
     "prisma": "^7.10.1",
     "supertest": "^7.3.1"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
   }
 }

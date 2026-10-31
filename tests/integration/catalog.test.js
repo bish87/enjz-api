@@ -2,11 +2,7 @@ import "../helpers/env.js";
 import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  createUser,
-  resetDb,
-  seedBase,
-} from "../helpers/db.js";
+import { createUser, resetDb, seedBase } from "../helpers/db.js";
 import { http, loginToken } from "../helpers/http.js";
 
 let fixtures;

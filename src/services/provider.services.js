@@ -174,7 +174,7 @@ export async function verifyProvider(userId, { status, note }) {
   try {
     const profile = await setProviderVerification(userId, {
       verificationStatus: status,
-      verificationNote: status === "REJECTED" ? note ?? null : null,
+      verificationNote: status === "REJECTED" ? (note ?? null) : null,
       verifiedAt: status === "VERIFIED" ? new Date() : null,
     });
 

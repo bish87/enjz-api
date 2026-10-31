@@ -3,14 +3,20 @@ import { z } from "zod";
 export const updateProviderSchema = z
   .object({
     bio: z.string().trim().max(1000).nullable().optional(),
-    experienceYears: z
-      .coerce.number()
+    experienceYears: z.coerce
+      .number()
       .int("Experience years must be a whole number")
       .min(0)
       .max(60)
       .nullable()
       .optional(),
-    startingPrice: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+    startingPrice: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(100_000_000)
+      .nullable()
+      .optional(),
     isAvailable: z.boolean().optional(),
   })
   .strict()
@@ -25,7 +31,13 @@ export const providerCategoriesSchema = z
         z
           .object({
             categoryId: z.coerce.number().int().positive(),
-            price: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+            price: z.coerce
+              .number()
+              .int()
+              .min(0)
+              .max(100_000_000)
+              .nullable()
+              .optional(),
           })
           .strict()
       )
@@ -64,6 +76,8 @@ export const verificationSchema = z
 
 export const adminProviderListQuerySchema = z
   .object({
-    status: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"]).optional(),
+    status: z
+      .enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"])
+      .optional(),
   })
   .strict();

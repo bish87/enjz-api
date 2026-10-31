@@ -1,5 +1,9 @@
 import bcrypt from "bcrypt";
-import { createUser, findUserByEmail, findUserByPhone } from "../repositories/user.repository.js";
+import {
+  createUser,
+  findUserByEmail,
+  findUserByPhone,
+} from "../repositories/user.repository.js";
 import { ConflictError } from "../utils/errors.js";
 import { env } from "../config/env.js";
 
