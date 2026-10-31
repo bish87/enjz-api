@@ -1,0 +1,16 @@
+node_modules
+generated
+.git
+.github
+.env
+.env.*
+!.env.example
+coverage
+logs
+*.log
+tests
+README.md
+agent.md
+Dockerfile
+.dockerignore
+.eslintcache

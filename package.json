@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "an api for sudan service plafrom ",
   "main": "app.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
