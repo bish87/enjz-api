@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { createUser, findUserByEmail, findUserByPhone } from "../repositories/user.repository.js";
 import { ConflictError } from "../utils/errors.js";
+import { env } from "../config/env.js";
 
 export async function registerUser(data) {
   const existingUser = await findUserByPhone(data.phone);
@@ -17,7 +18,7 @@ export async function registerUser(data) {
     }
   }
 
-  const passwordHash = await bcrypt.hash(data.password, 10);
+  const passwordHash = await bcrypt.hash(data.password, env.BCRYPT_ROUNDS);
 
   const user = await createUser(
     {

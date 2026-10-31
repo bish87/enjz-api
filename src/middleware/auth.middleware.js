@@ -80,11 +80,13 @@ export function errorHandler(err, req, res, next) {
     return next(err);
   }
 
-  console.error(err);
-
   const status =
     err.status ||
     (err.code === "P2002" ? 409 : err.code === "P2025" ? 404 : err.code === "P2003" ? 409 : 500);
+
+  if (status >= 500) {
+    console.error(err);
+  }
 
   let message = err.message || "Internal server error";
 
