@@ -3,10 +3,12 @@ import {
   listAdminProviders,
   verifyAdminProvider,
 } from "../controllers/admin.provider.controller.js";
+import { resetUserPassword } from "../controllers/admin.user.controller.js";
 import { listAdminBookings } from "../controllers/booking.controller.js";
 import { removeReview } from "../controllers/review.controller.js";
 import { authenticate, authorize } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
+import { adminResetPasswordSchema } from "../validation/auth.schema.js";
 import { idParamSchema } from "../validation/common.schema.js";
 import {
   adminProviderListQuerySchema,
@@ -37,5 +39,12 @@ router.get(
 );
 
 router.delete("/reviews/:id", validate(idParamSchema, "params"), removeReview);
+
+router.post(
+  "/users/:id/reset-password",
+  validate(idParamSchema, "params"),
+  validate(adminResetPasswordSchema),
+  resetUserPassword
+);
 
 export default router;

@@ -23,6 +23,18 @@ const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean)
     ),
+  FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+  RESEND_API_KEY: z
+    .string()
+    .optional()
+    .transform((value) => value || undefined),
+  FROM_EMAIL: z
+    .union([
+      z.string().email("FROM_EMAIL must be a valid email"),
+      z.literal(""),
+    ])
+    .optional()
+    .transform((value) => value || undefined),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -5,6 +5,8 @@ import { env } from "../../src/config/env.js";
 
 const TABLES = [
   "Review",
+  "PasswordResetToken",
+  "FailedLoginAttempt",
   "Booking",
   "ProviderArea",
   "ProviderCategory",

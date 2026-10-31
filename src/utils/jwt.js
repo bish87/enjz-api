@@ -6,6 +6,7 @@ export function generateToken(user) {
     {
       id: user.id,
       role: user.role,
+      v: user.tokenVersion ?? 0,
     },
     env.JWT_SECRET,
     {

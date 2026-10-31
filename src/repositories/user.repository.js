@@ -10,6 +10,7 @@ const publicUserSelect = {
   city: true,
   role: true,
   status: true,
+  tokenVersion: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -46,6 +47,35 @@ export function createUser(data, { createProviderProfile = false } = {}) {
 export function findUserById(id) {
   return prisma.user.findUnique({
     where: { id },
+    select: publicUserSelect,
+  });
+}
+
+export function findUserAuthById(id) {
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      ...publicUserSelect,
+      passwordHash: true,
+    },
+  });
+}
+
+export function updateUserPassword(id, passwordHash) {
+  return prisma.user.update({
+    where: { id },
+    data: {
+      passwordHash,
+      tokenVersion: { increment: 1 },
+    },
+    select: publicUserSelect,
+  });
+}
+
+export function incrementTokenVersion(id) {
+  return prisma.user.update({
+    where: { id },
+    data: { tokenVersion: { increment: 1 } },
     select: publicUserSelect,
   });
 }

@@ -26,6 +26,11 @@ const optionalEmail = z
   .optional()
   .transform((value) => value || null);
 
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(72, "Password must be at most 72 characters");
+
 export const registerSchema = z
   .object({
     firstName: z.string().trim().min(1, "First name is required").max(50),
@@ -39,10 +44,7 @@ export const registerSchema = z
     phone: sudanPhone,
     email: optionalEmail,
     city: z.string().trim().min(1, "City is required").max(100),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .max(72, "Password must be at most 72 characters"),
+    password: passwordSchema,
     role: z.enum(["CUSTOMER", "PROVIDER"]).default("CUSTOMER"),
   })
   .strict();
@@ -51,6 +53,40 @@ export const loginSchema = z
   .object({
     phone: sudanPhone,
     password: z.string().min(1, "Password is required"),
+  })
+  .strict();
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: passwordSchema,
+  })
+  .strict()
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "New password must be different from the current password",
+    path: ["newPassword"],
+  });
+
+export const forgotPasswordSchema = z
+  .object({
+    phone: sudanPhone,
+  })
+  .strict();
+
+export const resetPasswordSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(1, "Reset token is required")
+      .max(200, "Reset token is invalid"),
+    newPassword: passwordSchema,
+  })
+  .strict();
+
+export const adminResetPasswordSchema = z
+  .object({
+    newPassword: passwordSchema,
   })
   .strict();
 

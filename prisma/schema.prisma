@@ -48,14 +48,42 @@ model User {
   city         String
   role         UserRole   @default(CUSTOMER)
   status       UserStatus @default(PENDING)
+  tokenVersion Int        @default(0)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  providerProfile  ProviderProfile?
-  customerBookings Booking[]        @relation("CustomerBookings")
-  providerBookings Booking[]        @relation("ProviderBookings")
-  reviews          Review[]         @relation("CustomerReviews")
-  receivedReviews  Review[]         @relation("ProviderReviews")
+  providerProfile     ProviderProfile?
+  customerBookings    Booking[]            @relation("CustomerBookings")
+  providerBookings    Booking[]            @relation("ProviderBookings")
+  reviews             Review[]             @relation("CustomerReviews")
+  receivedReviews     Review[]             @relation("ProviderReviews")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model FailedLoginAttempt {
+  id          Int      @id @default(autoincrement())
+  phone       String
+  ip          String
+  attempts    Int      @default(0)
+  windowStart DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([phone, ip])
+  @@index([updatedAt])
 }
 
 model ProviderProfile {
