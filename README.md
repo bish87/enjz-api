@@ -45,6 +45,44 @@ npm run format:check
 npm run format
 ```
 
+## Docker Compose (local development)
+
+`compose.yaml` starts the API and a PostgreSQL container, applies migrations
+automatically, and keeps the database in a named volume. It is intended for
+local development only — production still uses the Dockerfile on Render and a
+managed Neon database.
+
+```bash
+cp .env.example .env
+# Set JWT_SECRET (openssl rand -hex 32) and any optional values
+docker compose up --build -d
+docker compose ps
+curl http://localhost:3000/api/v1/health
+```
+
+Useful commands:
+
+```bash
+docker compose logs -f api      # follow API logs
+docker compose down             # stop, keep the database volume
+docker compose down -v          # stop and delete local database data
+docker compose --profile tools run --rm seed   # categories, areas and admin
+```
+
+The stack uses these optional Compose-only variables (defaults shown):
+
+| Variable            | Default             | Purpose                                       |
+| ------------------- | ------------------- | --------------------------------------------- |
+| `POSTGRES_USER`     | `enjz`              | Local database user.                          |
+| `POSTGRES_PASSWORD` | `enjz_dev_password` | Local database password.                      |
+| `POSTGRES_DB`       | `enjz`              | Local database name.                          |
+| `POSTGRES_PORT`     | `5433`              | Host port for Postgres (avoids local `5432`). |
+| `API_PORT`          | `3000`              | Host port for the API.                        |
+
+`JWT_SECRET` is required. The `seed` service requires `ADMIN_PHONE` and
+`ADMIN_PASSWORD`; it is behind the `tools` profile so it does not run by
+default. The frontend is not part of this Compose stack.
+
 ## Environment variables
 
 | Variable            | Required | Description                                                                 |

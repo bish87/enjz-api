@@ -1,0 +1,94 @@
+name: enjz-api
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-enjz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-enjz_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-enjz}
+    ports:
+      # 5433 on the host avoids clashing with a local PostgreSQL on 5432.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-enjz} -d ${POSTGRES_DB:-enjz}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-enjz}:${POSTGRES_PASSWORD:-enjz_dev_password}@db:5432/${POSTGRES_DB:-enjz}?schema=public"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-enjz}:${POSTGRES_PASSWORD:-enjz_dev_password}@db:5432/${POSTGRES_DB:-enjz}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or the shell}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  seed:
+    build:
+      context: .
+      target: migrate
+    profiles: ["tools"]
+    command: ["npm", "run", "db:seed"]
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-enjz}:${POSTGRES_PASSWORD:-enjz_dev_password}@db:5432/${POSTGRES_DB:-enjz}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or the shell}
+      ADMIN_PHONE: ${ADMIN_PHONE:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  postgres-data:
