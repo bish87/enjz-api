@@ -56,6 +56,7 @@ npm run format
 | `JWT_SECRET`        | yes      | HS256 signing secret, at least 32 characters.                               |
 | `BCRYPT_ROUNDS`     | no       | bcrypt cost factor (default `10`, tests use `4`).                           |
 | `CORS_ORIGINS`      | no       | Comma-separated allowed browser origins. Defaults to local Vite origins.    |
+| `CORS` dev fallback | —        | In `development`, any `localhost`/`127.0.0.1`/`[::1]` port is also allowed. |
 | `FRONTEND_URL`      | no       | Base URL used in password-reset emails (default `http://localhost:5173`).   |
 | `RESEND_API_KEY`    | no       | Resend API key. Missing value disables reset email delivery with a warning. |
 | `FROM_EMAIL`        | no       | Verified sender address for reset emails.                                   |
@@ -63,6 +64,10 @@ npm run format
 | `ADMIN_PASSWORD`    | seed     | Admin password (min 8 chars) used by `npm run db:seed`.                     |
 | `ADMIN_EMAIL`       | no       | Optional admin email.                                                       |
 | `TEST_DATABASE_URL` | no       | Overrides the database used by `npm test`.                                  |
+
+In development, any localhost origin is accepted in addition to
+`CORS_ORIGINS`, so Vite can switch from `5173` to `5174` without breaking the
+API. Production only accepts the explicitly configured origins.
 
 ## Endpoints
 
