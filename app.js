@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
+import { corsOrigin } from "./src/config/cors.js";
 import { env } from "./src/config/env.js";
 import { logger } from "./src/config/logger.js";
 import { prisma } from "./src/config/prisma.js";
@@ -27,7 +28,7 @@ app.disable("x-powered-by");
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGINS,
+    origin: corsOrigin,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
