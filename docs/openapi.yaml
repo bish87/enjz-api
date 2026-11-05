@@ -1,0 +1,3335 @@
+openapi: 3.1.0
+info:
+  title: enjz API
+  version: 1.0.0
+  description: |
+    REST API for the enjz home-services platform.
+
+    The API supports customer and provider accounts, service categories and
+    coverage areas, provider discovery, bookings, reviews, and administrative
+    moderation.
+
+    ## Authentication
+
+    Protected endpoints use a bearer token returned by `POST /auth/login` or
+    `POST /auth/register`:
+
+    ```http
+    Authorization: Bearer <token>
+    ```
+
+    Tokens expire after 7 days. Logging out, changing a password, resetting a
+    password, or an administrator resetting a password revokes every existing
+    token for that account.
+
+    ## Errors
+
+    Standard errors return:
+
+    ```json
+    { "message": "Human-readable error message" }
+    ```
+
+    Validation errors additionally include field-level details:
+
+    ```json
+    {
+      "message": "Validation failed",
+      "errors": [{ "path": "phone", "message": "Invalid phone number" }]
+    }
+    ```
+
+    ## Rate limits
+
+    Authentication endpoints allow 10 requests per 15 minutes per IP. All
+    other endpoints share a limit of 300 requests per 15 minutes per IP. The
+    API returns `429` when a limit is exceeded.
+
+    ## cURL examples
+
+    The request samples use `$API_URL` for the deployment origin and `$TOKEN`
+    for a bearer token. For the live Render deployment:
+
+    ```bash
+    export API_URL="https://your-service.onrender.com"
+    export TOKEN="<token returned by /api/v1/auth/login>"
+    ```
+  contact:
+    name: enjz API
+    url: https://github.com/bish87/enjz-api
+  license:
+    name: ISC
+    identifier: ISC
+
+servers:
+  - url: /api/v1
+    description: Current server
+
+tags:
+  - name: Health
+    description: Service and database health checks.
+  - name: Auth
+    description: Registration, login, password reset, and session management.
+  - name: Users
+    description: Customer and provider account profiles.
+  - name: Services
+    description: Service categories and coverage areas used for provider discovery and bookings.
+  - name: Providers
+    description: Public provider discovery and provider self-service.
+  - name: Bookings
+    description: Booking creation, lifecycle transitions, and customer reviews.
+  - name: Reviews
+    description: Public provider reviews and administrative moderation.
+  - name: Admin
+    description: Administrative provider verification, booking oversight, and account support.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Check API health
+      description: Verifies that the API process can reach PostgreSQL. Returns `503` when the database is unavailable.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: API and database are healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              examples:
+                healthy:
+                  value:
+                    status: ok
+                    db: up
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          description: The database is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              examples:
+                unavailable:
+                  value:
+                    status: error
+                    db: down
+      x-codeSamples:
+        - lang: curl
+          label: Check health
+          source: |
+            curl "$API_URL/api/v1/health"
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a customer or provider
+      description: |
+        Creates an active account and returns a JWT. Provider accounts also get
+        a pending provider profile that must be completed and verified by an
+        administrator before appearing in public search.
+
+        Phone numbers are normalized to `+249` format. Emails are lowercased.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              customer:
+                summary: Customer registration
+                value:
+                  firstName: Ahmed
+                  lastName: Ali
+                  phone: "0912345678"
+                  email: ahmed@example.com
+                  city: Khartoum
+                  password: Passw0rd!
+                  role: CUSTOMER
+              provider:
+                summary: Provider registration
+                value:
+                  firstName: Sara
+                  lastName: Hassan
+                  phone: "+249912345679"
+                  city: Omdurman
+                  password: Passw0rd!
+                  role: PROVIDER
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+              examples:
+                customer:
+                  $ref: "#/components/examples/AuthResponse"
+                provider:
+                  $ref: "#/components/examples/ProviderAuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Register a customer
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/register" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "firstName": "Ahmed",
+                "lastName": "Ali",
+                "phone": "0912345678",
+                "email": "ahmed@example.com",
+                "city": "Khartoum",
+                "password": "Passw0rd!",
+                "role": "CUSTOMER"
+              }'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      description: |
+        Authenticates with a phone number and password. Five failed attempts for
+        the same phone and IP within 15 minutes trigger a temporary lockout.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              login:
+                value:
+                  phone: "+249912345678"
+                  password: Passw0rd!
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+              examples:
+                success:
+                  $ref: "#/components/examples/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid phone number or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                invalidCredentials:
+                  value:
+                    message: Invalid phone or password
+        "403":
+          description: Account is pending approval or suspended.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                pending:
+                  value:
+                    message: Account pending approval
+                suspended:
+                  value:
+                    message: Account suspended
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Log in
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/login" \
+              -H "Content-Type: application/json" \
+              -d '{"phone":"+249912345678","password":"Passw0rd!"}'
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset
+      description: |
+        Always returns `200` to prevent account enumeration. If the account has
+        an email address, a single-use reset link valid for 30 minutes is sent.
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+            examples:
+              request:
+                value:
+                  phone: "+249912345678"
+      responses:
+        "200":
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              examples:
+                accepted:
+                  value:
+                    message: If an account matches, a reset link has been sent.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Request a reset link
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/forgot-password" \
+              -H "Content-Type: application/json" \
+              -d '{"phone":"+249912345678"}'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset a password
+      description: |
+        Consumes a reset token and sets a new password. All existing sessions
+        are revoked. Reset tokens are single-use and expire after 30 minutes.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+            examples:
+              request:
+                value:
+                  token: 8c4f7f0c7d4a4a4c9f3b2e1d0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b
+                  newPassword: NewPassw0rd!
+      responses:
+        "200":
+          description: Password reset successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              examples:
+                success:
+                  value:
+                    message: Password reset successful. Please sign in again.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Reset a password
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/reset-password" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "token": "<reset-token>",
+                "newPassword": "NewPassw0rd!"
+              }'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current user
+      description: Returns the authenticated user's account record.
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSessionResponse"
+              examples:
+                currentUser:
+                  $ref: "#/components/examples/UserSessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Get current user
+          source: |
+            curl "$API_URL/api/v1/auth/me" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      description: |
+        Revokes every existing session for the authenticated account by
+        incrementing the user's token version.
+      operationId: logout
+      responses:
+        "200":
+          description: Logged out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              examples:
+                success:
+                  value:
+                    message: Logged out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Log out
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/logout" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /auth/password:
+    post:
+      tags: [Auth]
+      summary: Change the current password
+      description: |
+        Verifies the current password, sets a new one, and revokes every
+        existing session.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+            examples:
+              request:
+                value:
+                  currentPassword: Passw0rd!
+                  newPassword: NewPassw0rd!
+      responses:
+        "200":
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+              examples:
+                success:
+                  value:
+                    message: Password changed. Please sign in again.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: The current password is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                wrongPassword:
+                  value:
+                    message: Current password is incorrect
+                invalidToken:
+                  $ref: "#/components/examples/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Change password
+          source: |
+            curl -X POST "$API_URL/api/v1/auth/password" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "currentPassword": "Passw0rd!",
+                "newPassword": "NewPassw0rd!"
+              }'
+
+  /users/profile:
+    get:
+      tags: [Users]
+      summary: Get the current profile
+      description: Returns the authenticated user's profile.
+      operationId: getProfile
+      responses:
+        "200":
+          description: Current profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSessionResponse"
+              examples:
+                profile:
+                  $ref: "#/components/examples/UserSessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Get profile
+          source: |
+            curl "$API_URL/api/v1/users/profile" \
+              -H "Authorization: Bearer $TOKEN"
+    patch:
+      tags: [Users]
+      summary: Update the current profile
+      description: Updates the authenticated user's first name, last name, or city.
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+            examples:
+              request:
+                value:
+                  firstName: Ahmed
+                  lastName: Ali
+                  city: Omdurman
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSessionResponse"
+              examples:
+                updated:
+                  $ref: "#/components/examples/UserSessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Update profile
+          source: |
+            curl -X PATCH "$API_URL/api/v1/users/profile" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"firstName":"Ahmed","lastName":"Ali","city":"Omdurman"}'
+
+  /categories:
+    get:
+      tags: [Services]
+      summary: List service categories
+      description: Returns every service category, ordered by name.
+      operationId: listCategories
+      security: []
+      responses:
+        "200":
+          description: Category list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryList"
+              examples:
+                categories:
+                  value:
+                    categories:
+                      - id: 1
+                        name: Plumbing
+                        createdAt: "2026-10-27T12:44:12.000Z"
+                      - id: 2
+                        name: Cleaning
+                        createdAt: "2026-10-27T12:44:12.000Z"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List categories
+          source: |
+            curl "$API_URL/api/v1/categories"
+    post:
+      tags: [Services]
+      summary: Create a service category
+      description: Creates a category. Requires the `ADMIN` role.
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryRequest"
+            examples:
+              request:
+                value:
+                  name: Carpentry
+      responses:
+        "201":
+          description: Category created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryResponse"
+              examples:
+                created:
+                  value:
+                    category:
+                      id: 11
+                      name: Carpentry
+                      createdAt: "2026-11-05T09:15:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Create a category
+          source: |
+            curl -X POST "$API_URL/api/v1/categories" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"Carpentry"}'
+
+  /categories/new:
+    post:
+      tags: [Services]
+      summary: Create a service category (legacy alias)
+      description: |
+        Legacy alias for `POST /categories`. Requires the `ADMIN` role.
+      operationId: createCategoryLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryRequest"
+            examples:
+              request:
+                value:
+                  name: Carpentry
+      responses:
+        "201":
+          description: Category created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryResponse"
+              examples:
+                created:
+                  value:
+                    category:
+                      id: 11
+                      name: Carpentry
+                      createdAt: "2026-11-05T09:15:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Create a category (legacy path)
+          source: |
+            curl -X POST "$API_URL/api/v1/categories/new" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"Carpentry"}'
+
+  /categories/{id}:
+    delete:
+      tags: [Services]
+      summary: Delete a service category
+      description: |
+        Deletes a category. Requires the `ADMIN` role. Returns `409` when the
+        category is still referenced by providers or bookings.
+      operationId: deleteCategory
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Category deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryResponse"
+              examples:
+                deleted:
+                  value:
+                    category:
+                      id: 11
+                      name: Carpentry
+                      createdAt: "2026-11-05T09:15:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Delete a category
+          source: |
+            curl -X DELETE "$API_URL/api/v1/categories/11" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /areas:
+    get:
+      tags: [Services]
+      summary: List coverage areas
+      description: Returns coverage areas, optionally filtered by state.
+      operationId: listAreas
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Case-insensitive state name.
+          schema:
+            type: string
+            maxLength: 100
+          example: Khartoum
+      responses:
+        "200":
+          description: Area list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AreaList"
+              examples:
+                areas:
+                  value:
+                    areas:
+                      - id: 1
+                        name: Khartoum
+                        state: Khartoum
+                      - id: 2
+                        name: Omdurman
+                        state: Khartoum
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List areas
+          source: |
+            curl "$API_URL/api/v1/areas?state=Khartoum"
+    post:
+      tags: [Services]
+      summary: Create a coverage area
+      description: Creates an area. Requires the `ADMIN` role.
+      operationId: createArea
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AreaRequest"
+            examples:
+              request:
+                value:
+                  name: Atbara
+                  state: River Nile
+      responses:
+        "201":
+          description: Area created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AreaResponse"
+              examples:
+                created:
+                  value:
+                    area:
+                      id: 16
+                      name: Atbara
+                      state: River Nile
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Create an area
+          source: |
+            curl -X POST "$API_URL/api/v1/areas" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"Atbara","state":"River Nile"}'
+
+  /areas/{id}:
+    delete:
+      tags: [Services]
+      summary: Delete a coverage area
+      description: |
+        Deletes an area. Requires the `ADMIN` role. Returns `409` when the area
+        is still referenced by providers or bookings.
+      operationId: deleteArea
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Area deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AreaResponse"
+              examples:
+                deleted:
+                  value:
+                    area:
+                      id: 16
+                      name: Atbara
+                      state: River Nile
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Delete an area
+          source: |
+            curl -X DELETE "$API_URL/api/v1/areas/16" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /providers:
+    get:
+      tags: [Providers]
+      summary: Discover providers
+      description: |
+        Returns verified, active providers ordered by rating. Supports category,
+        area, text search, and availability filters.
+      operationId: listProviders
+      security: []
+      parameters:
+        - name: categoryId
+          in: query
+          required: false
+          description: Filter by service category ID.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: areaId
+          in: query
+          required: false
+          description: Filter by coverage area ID.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive search across name and bio.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          example: plumbing
+        - name: available
+          in: query
+          required: false
+          description: Filter by current availability.
+          schema:
+            type: string
+            enum: ["true", "false"]
+          example: "true"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Provider list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
+              examples:
+                providers:
+                  value:
+                    data:
+                      - id: 7
+                        firstName: Sara
+                        lastName: Hassan
+                        avatar: null
+                        city: Omdurman
+                        bio: Licensed plumber with 8 years of experience.
+                        experienceYears: 8
+                        startingPrice: 15000
+                        isAvailable: true
+                        ratingAvg: 4.8
+                        ratingCount: 12
+                        categories:
+                          - id: 1
+                            name: Plumbing
+                            price: 15000
+                        areas:
+                          - id: 2
+                            name: Omdurman
+                            state: Khartoum
+                    pagination:
+                      page: 1
+                      limit: 10
+                      total: 1
+                      totalPages: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Search providers
+          source: |
+            curl "$API_URL/api/v1/providers?categoryId=1&areaId=1&available=true&page=1&limit=10"
+
+  /providers/{id}:
+    get:
+      tags: [Providers]
+      summary: Get a public provider profile
+      description: Returns a verified, active provider's public profile.
+      operationId: getProvider
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Provider profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderPublic"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Get a provider
+          source: |
+            curl "$API_URL/api/v1/providers/7"
+
+  /providers/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: List a provider's reviews
+      description: |
+        Returns paginated reviews for a verified provider. Customer identities
+        are limited to first names.
+      operationId: listProviderReviews
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Review list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewList"
+              examples:
+                reviews:
+                  value:
+                    data:
+                      - id: 3
+                        bookingId: 42
+                        rating: 5
+                        comment: Arrived on time and fixed the leak quickly.
+                        createdAt: "2026-11-04T16:30:00.000Z"
+                        customer:
+                          firstName: Ahmed
+                    pagination:
+                      page: 1
+                      limit: 10
+                      total: 1
+                      totalPages: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List provider reviews
+          source: |
+            curl "$API_URL/api/v1/providers/7/reviews?page=1&limit=10"
+
+  /providers/me:
+    get:
+      tags: [Providers]
+      summary: Get own provider profile
+      description: |
+        Returns the authenticated provider's full profile, including verification
+        status and notes. Creates an empty profile on first access. Requires the
+        `PROVIDER` role.
+      operationId: getMyProvider
+      responses:
+        "200":
+          description: Own provider profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAdminResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderAdmin"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Get own provider profile
+          source: |
+            curl "$API_URL/api/v1/providers/me" \
+              -H "Authorization: Bearer $TOKEN"
+    put:
+      tags: [Providers]
+      summary: Update own provider profile
+      description: |
+        Updates bio, experience, starting price, or availability. Requires the
+        `PROVIDER` role. Editing a rejected or unverified profile resets it to
+        `PENDING` for administrator review.
+      operationId: updateMyProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdateRequest"
+            examples:
+              request:
+                value:
+                  bio: Licensed plumber with 8 years of experience.
+                  experienceYears: 8
+                  startingPrice: 15000
+                  isAvailable: true
+      responses:
+        "200":
+          description: Provider profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAdminResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Update provider profile
+          source: |
+            curl -X PUT "$API_URL/api/v1/providers/me" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "bio": "Licensed plumber with 8 years of experience.",
+                "experienceYears": 8,
+                "startingPrice": 15000,
+                "isAvailable": true
+              }'
+
+  /providers/me/categories:
+    put:
+      tags: [Providers]
+      summary: Replace offered categories
+      description: |
+        Replaces the provider's service categories and per-category prices.
+        Requires the `PROVIDER` role.
+      operationId: updateMyProviderCategories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderCategoriesRequest"
+            examples:
+              request:
+                value:
+                  categories:
+                    - categoryId: 1
+                      price: 15000
+                    - categoryId: 2
+                      price: null
+      responses:
+        "200":
+          description: Provider categories replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAdminResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Replace provider categories
+          source: |
+            curl -X PUT "$API_URL/api/v1/providers/me/categories" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"categories":[{"categoryId":1,"price":15000},{"categoryId":2,"price":null}]}'
+
+  /providers/me/areas:
+    put:
+      tags: [Providers]
+      summary: Replace served areas
+      description: |
+        Replaces the provider's coverage areas. Requires the `PROVIDER` role.
+      operationId: updateMyProviderAreas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderAreasRequest"
+            examples:
+              request:
+                value:
+                  areaIds: [1, 2]
+      responses:
+        "200":
+          description: Provider areas replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAdminResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Replace provider areas
+          source: |
+            curl -X PUT "$API_URL/api/v1/providers/me/areas" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"areaIds":[1,2]}'
+
+  /bookings:
+    post:
+      tags: [Bookings]
+      summary: Create a booking
+      description: |
+        Creates a pending booking for a verified provider, category, and area.
+        The provider must offer the category and serve the area. Contact details
+        are hidden until the booking is accepted. Requires the `CUSTOMER` role.
+      operationId: createBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingCreateRequest"
+            examples:
+              request:
+                value:
+                  providerId: 7
+                  categoryId: 1
+                  areaId: 1
+                  address: Street 12, Khartoum
+                  description: Leaking kitchen sink
+                  scheduledAt: "2026-11-10T09:00:00.000Z"
+      responses:
+        "201":
+          description: Booking created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                pending:
+                  $ref: "#/components/examples/BookingPending"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Provider is currently unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unavailable:
+                  value:
+                    message: Provider is currently unavailable
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Create a booking
+          source: |
+            curl -X POST "$API_URL/api/v1/bookings" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "providerId": 7,
+                "categoryId": 1,
+                "areaId": 1,
+                "address": "Street 12, Khartoum",
+                "description": "Leaking kitchen sink",
+                "scheduledAt": "2026-11-10T09:00:00.000Z"
+              }'
+
+  /bookings/me:
+    get:
+      tags: [Bookings]
+      summary: List own bookings
+      description: |
+        Returns the authenticated customer's or provider's bookings, optionally
+        filtered by status. Contact details are revealed for accepted and
+        completed bookings.
+      operationId: listMyBookings
+      parameters:
+        - $ref: "#/components/parameters/BookingStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Booking list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingList"
+              examples:
+                bookings:
+                  $ref: "#/components/examples/BookingListPending"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List own bookings
+          source: |
+            curl "$API_URL/api/v1/bookings/me?status=PENDING&page=1&limit=10" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /bookings/{id}:
+    get:
+      tags: [Bookings]
+      summary: Get a booking
+      description: |
+        Returns a booking to its customer, assigned provider, or an administrator.
+        Contact details are revealed for accepted and completed bookings.
+      operationId: getBooking
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Booking detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                accepted:
+                  $ref: "#/components/examples/BookingAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Get a booking
+          source: |
+            curl "$API_URL/api/v1/bookings/42" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /bookings/{id}/accept:
+    patch:
+      tags: [Bookings]
+      summary: Accept a booking
+      description: |
+        Accepts a pending booking. Only the assigned provider can accept.
+        Optionally records an agreed price. Requires the `PROVIDER` role.
+      operationId: acceptBooking
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptBookingRequest"
+            examples:
+              request:
+                value:
+                  agreedPrice: 18000
+      responses:
+        "200":
+          description: Booking accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                accepted:
+                  $ref: "#/components/examples/BookingAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Accept a booking
+          source: |
+            curl -X PATCH "$API_URL/api/v1/bookings/42/accept" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"agreedPrice":18000}'
+
+  /bookings/{id}/decline:
+    patch:
+      tags: [Bookings]
+      summary: Decline a booking
+      description: |
+        Declines a pending booking with an optional reason. Only the assigned
+        provider can decline. Requires the `PROVIDER` role.
+      operationId: declineBooking
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingReasonRequest"
+            examples:
+              request:
+                value:
+                  reason: Already booked for that time.
+      responses:
+        "200":
+          description: Booking declined.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                declined:
+                  $ref: "#/components/examples/BookingDeclined"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Decline a booking
+          source: |
+            curl -X PATCH "$API_URL/api/v1/bookings/42/decline" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"reason":"Already booked for that time."}'
+
+  /bookings/{id}/complete:
+    patch:
+      tags: [Bookings]
+      summary: Complete a booking
+      description: |
+        Marks an accepted booking as completed. Only the assigned provider can
+        complete it. Requires the `PROVIDER` role.
+      operationId: completeBooking
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Booking completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                completed:
+                  $ref: "#/components/examples/BookingCompleted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Complete a booking
+          source: |
+            curl -X PATCH "$API_URL/api/v1/bookings/42/complete" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /bookings/{id}/cancel:
+    patch:
+      tags: [Bookings]
+      summary: Cancel a booking
+      description: |
+        Cancels a pending or accepted booking with an optional reason. The
+        customer, assigned provider, or an administrator can cancel.
+      operationId: cancelBooking
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingReasonRequest"
+            examples:
+              request:
+                value:
+                  reason: The visit is no longer needed.
+      responses:
+        "200":
+          description: Booking cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                cancelled:
+                  $ref: "#/components/examples/BookingCancelled"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Cancel a booking
+          source: |
+            curl -X PATCH "$API_URL/api/v1/bookings/42/cancel" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"reason":"The visit is no longer needed."}'
+
+  /bookings/{id}/review:
+    post:
+      tags: [Bookings, Reviews]
+      summary: Review a completed booking
+      description: |
+        Creates one review for a completed booking. Only the customer who owns
+        the booking can review it. Requires the `CUSTOMER` role.
+      operationId: createReview
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewCreateRequest"
+            examples:
+              request:
+                value:
+                  rating: 5
+                  comment: Arrived on time and fixed the leak quickly.
+      responses:
+        "201":
+          description: Review created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewResponse"
+              examples:
+                review:
+                  $ref: "#/components/examples/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Booking is not completed or has already been reviewed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notCompleted:
+                  value:
+                    message: Only completed bookings can be reviewed
+                alreadyReviewed:
+                  value:
+                    message: Booking has already been reviewed
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Review a completed booking
+          source: |
+            curl -X POST "$API_URL/api/v1/bookings/42/review" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"rating":5,"comment":"Arrived on time and fixed the leak quickly."}'
+
+  /admin/providers:
+    get:
+      tags: [Admin]
+      summary: List providers for verification
+      description: |
+        Returns provider profiles, optionally filtered by verification status.
+        Requires the `ADMIN` role. This endpoint is currently unpaginated.
+      operationId: listAdminProviders
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by verification status.
+          schema:
+            type: string
+            enum: [UNVERIFIED, PENDING, VERIFIED, REJECTED]
+          example: PENDING
+      responses:
+        "200":
+          description: Provider list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProviderList"
+              examples:
+                providers:
+                  $ref: "#/components/examples/AdminProviderList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List pending providers
+          source: |
+            curl "$API_URL/api/v1/admin/providers?status=PENDING" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /admin/providers/{id}/verification:
+    patch:
+      tags: [Admin]
+      summary: Verify or reject a provider
+      description: |
+        Sets a provider's verification status. Requires the `ADMIN` role. A
+        rejection note is stored only when the status is `REJECTED`.
+      operationId: verifyProvider
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationRequest"
+            examples:
+              verified:
+                value:
+                  status: VERIFIED
+              rejected:
+                value:
+                  status: REJECTED
+                  note: Identity documents could not be verified.
+      responses:
+        "200":
+          description: Verification updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderAdminResponse"
+              examples:
+                provider:
+                  $ref: "#/components/examples/ProviderAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Verify a provider
+          source: |
+            curl -X PATCH "$API_URL/api/v1/admin/providers/7/verification" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"status":"VERIFIED"}'
+
+  /admin/bookings:
+    get:
+      tags: [Admin]
+      summary: List all bookings
+      description: |
+        Returns all bookings with contact details revealed. Requires the
+        `ADMIN` role.
+      operationId: listAdminBookings
+      parameters:
+        - $ref: "#/components/parameters/BookingStatus"
+        - name: customerId
+          in: query
+          required: false
+          description: Filter by customer user ID.
+          schema:
+            type: integer
+            minimum: 1
+          example: 12
+        - name: providerId
+          in: query
+          required: false
+          description: Filter by provider user ID.
+          schema:
+            type: integer
+            minimum: 1
+          example: 7
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Booking list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingList"
+              examples:
+                bookings:
+                  $ref: "#/components/examples/BookingListAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: List all bookings
+          source: |
+            curl "$API_URL/api/v1/admin/bookings?status=ACCEPTED&page=1&limit=10" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /admin/reviews/{id}:
+    delete:
+      tags: [Admin, Reviews]
+      summary: Delete a review
+      description: |
+        Deletes a review and recomputes the provider's rating aggregate.
+        Requires the `ADMIN` role.
+      operationId: deleteReview
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Review deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReviewResponse"
+              examples:
+                review:
+                  $ref: "#/components/examples/AdminReview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Delete a review
+          source: |
+            curl -X DELETE "$API_URL/api/v1/admin/reviews/3" \
+              -H "Authorization: Bearer $TOKEN"
+
+  /admin/users/{id}/reset-password:
+    post:
+      tags: [Admin]
+      summary: Reset a user's password
+      description: |
+        Sets a new password for an account without requiring the current
+        password. Intended for users who cannot receive email. Requires the
+        `ADMIN` role. All existing sessions are revoked.
+      operationId: adminResetPassword
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminResetPasswordRequest"
+            examples:
+              request:
+                value:
+                  newPassword: NewPassw0rd!
+      responses:
+        "200":
+          description: Password reset.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSessionResponse"
+              examples:
+                user:
+                  $ref: "#/components/examples/UserSessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+      x-codeSamples:
+        - lang: curl
+          label: Reset a user password
+          source: |
+            curl -X POST "$API_URL/api/v1/admin/users/12/reset-password" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"newPassword":"NewPassw0rd!"}'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT returned by `POST /auth/login` or `POST /auth/register`.
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Numeric resource ID.
+      schema:
+        type: integer
+        minimum: 1
+      example: 42
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Page number, starting at 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Number of items per page. Maximum 50.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      example: 10
+    BookingStatus:
+      name: status
+      in: query
+      required: false
+      description: Filter by booking status.
+      schema:
+        type: string
+        enum: [PENDING, ACCEPTED, DECLINED, COMPLETED, CANCELLED]
+      example: PENDING
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Resource not found
+
+    ValidationError:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+          example: Validation failed
+        errors:
+          type: array
+          items:
+            type: object
+            required: [path, message]
+            properties:
+              path:
+                type: string
+                example: phone
+              message:
+                type: string
+                example: Invalid phone number
+
+    Message:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Operation completed successfully.
+
+    Health:
+      type: object
+      required: [status, db]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+          example: ok
+        db:
+          type: string
+          enum: [up, down]
+          example: up
+
+    User:
+      type: object
+      required: [id, firstName, phone, city, role, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          example: 12
+        firstName:
+          type: string
+          example: Ahmed
+        lastName:
+          type: [string, "null"]
+          example: Ali
+        phone:
+          type: string
+          example: "+249912345678"
+        email:
+          type: [string, "null"]
+          format: email
+          example: ahmed@example.com
+        avatar:
+          type: [string, "null"]
+          format: uri
+          example: null
+        city:
+          type: string
+          example: Khartoum
+        role:
+          type: string
+          enum: [CUSTOMER, PROVIDER, ADMIN]
+          example: CUSTOMER
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, PENDING]
+          example: ACTIVE
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-01T08:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-11-01T08:00:00.000Z"
+
+    UserSession:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [tokenVersion]
+          properties:
+            tokenVersion:
+              type: integer
+              readOnly: true
+              description: Internal session version used to revoke JWT sessions.
+              example: 0
+
+    AuthResponse:
+      type: object
+      required: [user, token]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        message:
+          type: string
+          example: Provider account created. Complete your profile and wait for admin verification.
+
+    UserSessionResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/UserSession"
+
+    Category:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Plumbing
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-27T12:44:12.000Z"
+
+    CategoryList:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    CategoryResponse:
+      type: object
+      required: [category]
+      properties:
+        category:
+          $ref: "#/components/schemas/Category"
+
+    Area:
+      type: object
+      required: [id, name, state]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Khartoum
+        state:
+          type: string
+          example: Khartoum
+
+    AreaList:
+      type: object
+      required: [areas]
+      properties:
+        areas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Area"
+
+    AreaResponse:
+      type: object
+      required: [area]
+      properties:
+        area:
+          $ref: "#/components/schemas/Area"
+
+    ProviderCategory:
+      type: object
+      required: [id, name, price]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Plumbing
+        price:
+          type: [integer, "null"]
+          example: 15000
+
+    ProviderPublic:
+      type: object
+      required:
+        [
+          id,
+          firstName,
+          city,
+          isAvailable,
+          ratingAvg,
+          ratingCount,
+          categories,
+          areas,
+        ]
+      properties:
+        id:
+          type: integer
+          description: Provider user ID.
+          example: 7
+        firstName:
+          type: string
+          example: Sara
+        lastName:
+          type: [string, "null"]
+          example: Hassan
+        avatar:
+          type: [string, "null"]
+          format: uri
+          example: null
+        city:
+          type: string
+          example: Omdurman
+        bio:
+          type: [string, "null"]
+          example: Licensed plumber with 8 years of experience.
+        experienceYears:
+          type: [integer, "null"]
+          example: 8
+        startingPrice:
+          type: [integer, "null"]
+          description: Starting price in whole SDG.
+          example: 15000
+        isAvailable:
+          type: boolean
+          example: true
+        ratingAvg:
+          type: number
+          format: float
+          example: 4.8
+        ratingCount:
+          type: integer
+          example: 12
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderCategory"
+        areas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Area"
+
+    ProviderList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderPublic"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    ProviderResponse:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          $ref: "#/components/schemas/ProviderPublic"
+
+    AdminUser:
+      type: object
+      required: [id, firstName, phone, city, status]
+      properties:
+        id:
+          type: integer
+          example: 7
+        firstName:
+          type: string
+          example: Sara
+        lastName:
+          type: [string, "null"]
+          example: Hassan
+        phone:
+          type: string
+          example: "+249912345679"
+        email:
+          type: [string, "null"]
+          format: email
+          example: sara@example.com
+        avatar:
+          type: [string, "null"]
+          format: uri
+          example: null
+        city:
+          type: string
+          example: Omdurman
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, PENDING]
+          example: ACTIVE
+
+    ProviderAdmin:
+      type: object
+      required:
+        [
+          id,
+          user,
+          isAvailable,
+          verificationStatus,
+          ratingAvg,
+          ratingCount,
+          categories,
+          areas,
+        ]
+      properties:
+        id:
+          type: integer
+          description: Provider user ID.
+          example: 7
+        user:
+          $ref: "#/components/schemas/AdminUser"
+        bio:
+          type: [string, "null"]
+          example: Licensed plumber with 8 years of experience.
+        experienceYears:
+          type: [integer, "null"]
+          example: 8
+        startingPrice:
+          type: [integer, "null"]
+          description: Starting price in whole SDG.
+          example: 15000
+        isAvailable:
+          type: boolean
+          example: true
+        verificationStatus:
+          type: string
+          enum: [UNVERIFIED, PENDING, VERIFIED, REJECTED]
+          example: VERIFIED
+        verificationNote:
+          type: [string, "null"]
+          example: null
+        verifiedAt:
+          type: [string, "null"]
+          format: date-time
+          example: "2026-11-01T10:00:00.000Z"
+        ratingAvg:
+          type: number
+          format: float
+          example: 4.8
+        ratingCount:
+          type: integer
+          example: 12
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderCategory"
+        areas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Area"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-28T09:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-11-01T10:00:00.000Z"
+
+    ProviderAdminResponse:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          $ref: "#/components/schemas/ProviderAdmin"
+
+    AdminProviderList:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderAdmin"
+
+    BookingPerson:
+      type: object
+      required: [id, firstName, city]
+      properties:
+        id:
+          type: integer
+          example: 12
+        firstName:
+          type: string
+          example: Ahmed
+        lastName:
+          type: [string, "null"]
+          example: Ali
+        avatar:
+          type: [string, "null"]
+          format: uri
+          example: null
+        city:
+          type: string
+          example: Khartoum
+        phone:
+          type: string
+          description: Present only after the booking is accepted or completed.
+          example: "+249912345678"
+        email:
+          type: [string, "null"]
+          format: email
+          description: Present only after the booking is accepted or completed.
+          example: ahmed@example.com
+
+    Booking:
+      type: object
+      required:
+        [
+          id,
+          status,
+          address,
+          description,
+          scheduledAt,
+          customer,
+          provider,
+          category,
+          area,
+        ]
+      properties:
+        id:
+          type: integer
+          example: 42
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, DECLINED, COMPLETED, CANCELLED]
+          example: PENDING
+        address:
+          type: string
+          example: Street 12, Khartoum
+        description:
+          type: string
+          example: Leaking kitchen sink
+        scheduledAt:
+          type: string
+          format: date-time
+          example: "2026-11-10T09:00:00.000Z"
+        agreedPrice:
+          type: [integer, "null"]
+          description: Agreed price in whole SDG.
+          example: null
+        cancelledReason:
+          type: [string, "null"]
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T08:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T08:00:00.000Z"
+        customer:
+          $ref: "#/components/schemas/BookingPerson"
+        provider:
+          $ref: "#/components/schemas/BookingPerson"
+        category:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: Plumbing
+        area:
+          $ref: "#/components/schemas/Area"
+        review:
+          oneOf:
+            - $ref: "#/components/schemas/Review"
+            - type: "null"
+
+    BookingList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    BookingResponse:
+      type: object
+      required: [booking]
+      properties:
+        booking:
+          $ref: "#/components/schemas/Booking"
+
+    Review:
+      type: object
+      required: [id, bookingId, rating, createdAt, customer]
+      properties:
+        id:
+          type: integer
+          example: 3
+        bookingId:
+          type: integer
+          example: 42
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: [string, "null"]
+          example: Arrived on time and fixed the leak quickly.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-04T16:30:00.000Z"
+        customer:
+          type: object
+          required: [firstName]
+          properties:
+            firstName:
+              type: string
+              example: Ahmed
+
+    ReviewList:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Review"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    ReviewResponse:
+      type: object
+      required: [review]
+      properties:
+        review:
+          $ref: "#/components/schemas/Review"
+
+    AdminReview:
+      type: object
+      required: [id, bookingId, customerId, providerId, rating, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 3
+        bookingId:
+          type: integer
+          example: 42
+        customerId:
+          type: integer
+          example: 12
+        providerId:
+          type: integer
+          example: 7
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: [string, "null"]
+          example: Arrived on time and fixed the leak quickly.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-04T16:30:00.000Z"
+
+    AdminReviewResponse:
+      type: object
+      required: [review]
+      properties:
+        review:
+          $ref: "#/components/schemas/AdminReview"
+
+    Pagination:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 24
+        totalPages:
+          type: integer
+          example: 3
+
+    RegisterRequest:
+      type: object
+      required: [firstName, phone, city, password]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Ahmed
+        lastName:
+          type: [string, "null"]
+          maxLength: 50
+          example: Ali
+        phone:
+          type: string
+          description: Sudan phone number. Local, 249, and +249 formats are normalized.
+          example: "0912345678"
+        email:
+          type: [string, "null"]
+          format: email
+          example: ahmed@example.com
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Khartoum
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          example: Passw0rd!
+        role:
+          type: string
+          enum: [CUSTOMER, PROVIDER]
+          default: CUSTOMER
+          example: CUSTOMER
+
+    LoginRequest:
+      type: object
+      required: [phone, password]
+      properties:
+        phone:
+          type: string
+          example: "+249912345678"
+        password:
+          type: string
+          format: password
+          example: Passw0rd!
+
+    ForgotPasswordRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          example: "+249912345678"
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          example: 8c4f7f0c7d4a4a4c9f3b2e1d0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          example: NewPassw0rd!
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          example: Passw0rd!
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          example: NewPassw0rd!
+
+    UpdateProfileRequest:
+      type: object
+      minProperties: 1
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Ahmed
+        lastName:
+          type: [string, "null"]
+          maxLength: 50
+          example: Ali
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Omdurman
+
+    CategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Carpentry
+
+    AreaRequest:
+      type: object
+      required: [name, state]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Atbara
+        state:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: River Nile
+
+    ProviderUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        bio:
+          type: [string, "null"]
+          maxLength: 1000
+          example: Licensed plumber with 8 years of experience.
+        experienceYears:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 60
+          example: 8
+        startingPrice:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 100000000
+          description: Starting price in whole SDG.
+          example: 15000
+        isAvailable:
+          type: boolean
+          example: true
+
+    ProviderCategoriesRequest:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [categoryId]
+            properties:
+              categoryId:
+                type: integer
+                minimum: 1
+                example: 1
+              price:
+                type: [integer, "null"]
+                minimum: 0
+                maximum: 100000000
+                description: Price in whole SDG.
+                example: 15000
+
+    ProviderAreasRequest:
+      type: object
+      required: [areaIds]
+      properties:
+        areaIds:
+          type: array
+          maxItems: 20
+          items:
+            type: integer
+            minimum: 1
+          example: [1, 2]
+
+    BookingCreateRequest:
+      type: object
+      required:
+        [providerId, categoryId, areaId, address, description, scheduledAt]
+      properties:
+        providerId:
+          type: integer
+          minimum: 1
+          example: 7
+        categoryId:
+          type: integer
+          minimum: 1
+          example: 1
+        areaId:
+          type: integer
+          minimum: 1
+          example: 1
+        address:
+          type: string
+          minLength: 5
+          maxLength: 255
+          example: Street 12, Khartoum
+        description:
+          type: string
+          minLength: 5
+          maxLength: 1000
+          example: Leaking kitchen sink
+        scheduledAt:
+          type: string
+          format: date-time
+          description: Must be in the future.
+          example: "2026-11-10T09:00:00.000Z"
+
+    AcceptBookingRequest:
+      type: object
+      properties:
+        agreedPrice:
+          type: integer
+          minimum: 0
+          maximum: 100000000
+          description: Agreed price in whole SDG.
+          example: 18000
+
+    BookingReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          example: Already booked for that time.
+
+    ReviewCreateRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: [string, "null"]
+          maxLength: 500
+          example: Arrived on time and fixed the leak quickly.
+
+    VerificationRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [VERIFIED, REJECTED, PENDING]
+          example: VERIFIED
+        note:
+          type: string
+          maxLength: 500
+          example: Identity documents could not be verified.
+
+    AdminResetPasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          example: NewPassw0rd!
+
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+          examples:
+            validation:
+              $ref: "#/components/examples/ValidationError"
+
+    Unauthorized:
+      description: Missing, malformed, expired, or revoked bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unauthorized:
+              $ref: "#/components/examples/Unauthorized"
+
+    Forbidden:
+      description: The account does not have the required role or is not active.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            forbidden:
+              $ref: "#/components/examples/Forbidden"
+
+    NotFound:
+      description: The requested resource was not found or is not visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notFound:
+              $ref: "#/components/examples/NotFound"
+
+    Conflict:
+      description: The request conflicts with the current resource state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            conflict:
+              $ref: "#/components/examples/Conflict"
+
+    TooManyRequests:
+      description: Rate limit or login lockout exceeded.
+      headers:
+        RateLimit:
+          description: Rate limit status.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            tooManyRequests:
+              $ref: "#/components/examples/TooManyRequests"
+
+    InternalServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            serverError:
+              $ref: "#/components/examples/InternalServerError"
+
+  examples:
+    AuthResponse:
+      summary: Authenticated user
+      value:
+        user:
+          id: 12
+          firstName: Ahmed
+          lastName: Ali
+          phone: "+249912345678"
+          email: ahmed@example.com
+          avatar: null
+          city: Khartoum
+          role: CUSTOMER
+          status: ACTIVE
+          createdAt: "2026-11-01T08:00:00.000Z"
+          updatedAt: "2026-11-01T08:00:00.000Z"
+        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    ProviderAuthResponse:
+      summary: Authenticated provider
+      value:
+        user:
+          id: 7
+          firstName: Sara
+          lastName: Hassan
+          phone: "+249912345679"
+          email: null
+          avatar: null
+          city: Omdurman
+          role: PROVIDER
+          status: ACTIVE
+          createdAt: "2026-11-01T08:00:00.000Z"
+          updatedAt: "2026-11-01T08:00:00.000Z"
+        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        message: Provider account created. Complete your profile and wait for admin verification.
+
+    UserSessionResponse:
+      summary: Current user
+      value:
+        user:
+          id: 12
+          firstName: Ahmed
+          lastName: Ali
+          phone: "+249912345678"
+          email: ahmed@example.com
+          avatar: null
+          city: Khartoum
+          role: CUSTOMER
+          status: ACTIVE
+          tokenVersion: 0
+          createdAt: "2026-11-01T08:00:00.000Z"
+          updatedAt: "2026-11-01T08:00:00.000Z"
+
+    ProviderPublic:
+      summary: Public provider profile
+      value:
+        provider:
+          id: 7
+          firstName: Sara
+          lastName: Hassan
+          avatar: null
+          city: Omdurman
+          bio: Licensed plumber with 8 years of experience.
+          experienceYears: 8
+          startingPrice: 15000
+          isAvailable: true
+          ratingAvg: 4.8
+          ratingCount: 12
+          categories:
+            - id: 1
+              name: Plumbing
+              price: 15000
+          areas:
+            - id: 2
+              name: Omdurman
+              state: Khartoum
+
+    ProviderAdmin:
+      summary: Provider profile
+      value:
+        provider:
+          id: 7
+          user:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            phone: "+249912345679"
+            email: sara@example.com
+            avatar: null
+            city: Omdurman
+            status: ACTIVE
+          bio: Licensed plumber with 8 years of experience.
+          experienceYears: 8
+          startingPrice: 15000
+          isAvailable: true
+          verificationStatus: VERIFIED
+          verificationNote: null
+          verifiedAt: "2026-11-01T10:00:00.000Z"
+          ratingAvg: 4.8
+          ratingCount: 12
+          categories:
+            - id: 1
+              name: Plumbing
+              price: 15000
+          areas:
+            - id: 2
+              name: Omdurman
+              state: Khartoum
+          createdAt: "2026-10-28T09:00:00.000Z"
+          updatedAt: "2026-11-01T10:00:00.000Z"
+
+    AdminProviderList:
+      summary: Provider list
+      value:
+        providers:
+          - id: 7
+            user:
+              id: 7
+              firstName: Sara
+              lastName: Hassan
+              phone: "+249912345679"
+              email: sara@example.com
+              avatar: null
+              city: Omdurman
+              status: ACTIVE
+            bio: Licensed plumber with 8 years of experience.
+            experienceYears: 8
+            startingPrice: 15000
+            isAvailable: true
+            verificationStatus: PENDING
+            verificationNote: null
+            verifiedAt: null
+            ratingAvg: 0
+            ratingCount: 0
+            categories:
+              - id: 1
+                name: Plumbing
+                price: 15000
+            areas:
+              - id: 2
+                name: Omdurman
+                state: Khartoum
+            createdAt: "2026-10-28T09:00:00.000Z"
+            updatedAt: "2026-10-28T09:00:00.000Z"
+
+    BookingListPending:
+      summary: Pending booking list
+      value:
+        data:
+          - id: 42
+            status: PENDING
+            address: Street 12, Khartoum
+            description: Leaking kitchen sink
+            scheduledAt: "2026-11-10T09:00:00.000Z"
+            agreedPrice: null
+            cancelledReason: null
+            createdAt: "2026-11-05T08:00:00.000Z"
+            updatedAt: "2026-11-05T08:00:00.000Z"
+            customer:
+              id: 12
+              firstName: Ahmed
+              lastName: Ali
+              avatar: null
+              city: Khartoum
+            provider:
+              id: 7
+              firstName: Sara
+              lastName: Hassan
+              avatar: null
+              city: Omdurman
+            category:
+              id: 1
+              name: Plumbing
+            area:
+              id: 1
+              name: Khartoum
+              state: Khartoum
+            review: null
+        pagination:
+          page: 1
+          limit: 10
+          total: 1
+          totalPages: 1
+
+    BookingPending:
+      summary: Pending booking
+      value:
+        booking:
+          id: 42
+          status: PENDING
+          address: Street 12, Khartoum
+          description: Leaking kitchen sink
+          scheduledAt: "2026-11-10T09:00:00.000Z"
+          agreedPrice: null
+          cancelledReason: null
+          createdAt: "2026-11-05T08:00:00.000Z"
+          updatedAt: "2026-11-05T08:00:00.000Z"
+          customer:
+            id: 12
+            firstName: Ahmed
+            lastName: Ali
+            avatar: null
+            city: Khartoum
+          provider:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            avatar: null
+            city: Omdurman
+          category:
+            id: 1
+            name: Plumbing
+          area:
+            id: 1
+            name: Khartoum
+            state: Khartoum
+          review: null
+
+    BookingListAccepted:
+      summary: Accepted booking list
+      value:
+        data:
+          - id: 42
+            status: ACCEPTED
+            address: Street 12, Khartoum
+            description: Leaking kitchen sink
+            scheduledAt: "2026-11-10T09:00:00.000Z"
+            agreedPrice: 18000
+            cancelledReason: null
+            createdAt: "2026-11-05T08:00:00.000Z"
+            updatedAt: "2026-11-05T09:00:00.000Z"
+            customer:
+              id: 12
+              firstName: Ahmed
+              lastName: Ali
+              avatar: null
+              city: Khartoum
+              phone: "+249912345678"
+              email: ahmed@example.com
+            provider:
+              id: 7
+              firstName: Sara
+              lastName: Hassan
+              avatar: null
+              city: Omdurman
+              phone: "+249912345679"
+              email: sara@example.com
+            category:
+              id: 1
+              name: Plumbing
+            area:
+              id: 1
+              name: Khartoum
+              state: Khartoum
+            review: null
+        pagination:
+          page: 1
+          limit: 10
+          total: 1
+          totalPages: 1
+
+    BookingAccepted:
+      summary: Accepted booking
+      value:
+        booking:
+          id: 42
+          status: ACCEPTED
+          address: Street 12, Khartoum
+          description: Leaking kitchen sink
+          scheduledAt: "2026-11-10T09:00:00.000Z"
+          agreedPrice: 18000
+          cancelledReason: null
+          createdAt: "2026-11-05T08:00:00.000Z"
+          updatedAt: "2026-11-05T09:00:00.000Z"
+          customer:
+            id: 12
+            firstName: Ahmed
+            lastName: Ali
+            avatar: null
+            city: Khartoum
+            phone: "+249912345678"
+            email: ahmed@example.com
+          provider:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            avatar: null
+            city: Omdurman
+            phone: "+249912345679"
+            email: sara@example.com
+          category:
+            id: 1
+            name: Plumbing
+          area:
+            id: 1
+            name: Khartoum
+            state: Khartoum
+          review: null
+
+    BookingCompleted:
+      summary: Completed booking
+      value:
+        booking:
+          id: 42
+          status: COMPLETED
+          address: Street 12, Khartoum
+          description: Leaking kitchen sink
+          scheduledAt: "2026-11-10T09:00:00.000Z"
+          agreedPrice: 18000
+          cancelledReason: null
+          createdAt: "2026-11-05T08:00:00.000Z"
+          updatedAt: "2026-11-10T11:00:00.000Z"
+          customer:
+            id: 12
+            firstName: Ahmed
+            lastName: Ali
+            avatar: null
+            city: Khartoum
+            phone: "+249912345678"
+            email: ahmed@example.com
+          provider:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            avatar: null
+            city: Omdurman
+            phone: "+249912345679"
+            email: sara@example.com
+          category:
+            id: 1
+            name: Plumbing
+          area:
+            id: 1
+            name: Khartoum
+            state: Khartoum
+          review:
+            id: 3
+            bookingId: 42
+            rating: 5
+            comment: Arrived on time and fixed the leak quickly.
+            createdAt: "2026-11-10T12:00:00.000Z"
+            customer:
+              firstName: Ahmed
+
+    BookingDeclined:
+      summary: Declined booking
+      value:
+        booking:
+          id: 42
+          status: DECLINED
+          address: Street 12, Khartoum
+          description: Leaking kitchen sink
+          scheduledAt: "2026-11-10T09:00:00.000Z"
+          agreedPrice: null
+          cancelledReason: Already booked for that time.
+          createdAt: "2026-11-05T08:00:00.000Z"
+          updatedAt: "2026-11-05T09:00:00.000Z"
+          customer:
+            id: 12
+            firstName: Ahmed
+            lastName: Ali
+            avatar: null
+            city: Khartoum
+          provider:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            avatar: null
+            city: Omdurman
+          category:
+            id: 1
+            name: Plumbing
+          area:
+            id: 1
+            name: Khartoum
+            state: Khartoum
+          review: null
+
+    BookingCancelled:
+      summary: Cancelled booking
+      value:
+        booking:
+          id: 42
+          status: CANCELLED
+          address: Street 12, Khartoum
+          description: Leaking kitchen sink
+          scheduledAt: "2026-11-10T09:00:00.000Z"
+          agreedPrice: 18000
+          cancelledReason: The visit is no longer needed.
+          createdAt: "2026-11-05T08:00:00.000Z"
+          updatedAt: "2026-11-05T10:00:00.000Z"
+          customer:
+            id: 12
+            firstName: Ahmed
+            lastName: Ali
+            avatar: null
+            city: Khartoum
+          provider:
+            id: 7
+            firstName: Sara
+            lastName: Hassan
+            avatar: null
+            city: Omdurman
+          category:
+            id: 1
+            name: Plumbing
+          area:
+            id: 1
+            name: Khartoum
+            state: Khartoum
+          review: null
+
+    Review:
+      summary: Booking review
+      value:
+        review:
+          id: 3
+          bookingId: 42
+          rating: 5
+          comment: Arrived on time and fixed the leak quickly.
+          createdAt: "2026-11-04T16:30:00.000Z"
+          customer:
+            firstName: Ahmed
+
+    AdminReview:
+      summary: Deleted review
+      value:
+        review:
+          id: 3
+          bookingId: 42
+          customerId: 12
+          providerId: 7
+          rating: 5
+          comment: Arrived on time and fixed the leak quickly.
+          createdAt: "2026-11-04T16:30:00.000Z"
+
+    ValidationError:
+      summary: Validation failure
+      value:
+        message: Validation failed
+        errors:
+          - path: phone
+            message: Invalid phone number
+          - path: password
+            message: Password must be at least 8 characters
+
+    Unauthorized:
+      summary: Authentication required
+      value:
+        message: Authentication required
+
+    Forbidden:
+      summary: Insufficient permissions
+      value:
+        message: You do not have permission
+
+    NotFound:
+      summary: Resource not found
+      value:
+        message: Resource not found
+
+    Conflict:
+      summary: Resource conflict
+      value:
+        message: Resource already exists
+
+    TooManyRequests:
+      summary: Rate limited
+      value:
+        message: Too many requests. Please try again later.
+
+    InternalServerError:
+      summary: Server error
+      value:
+        message: Internal server error

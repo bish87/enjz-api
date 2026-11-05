@@ -46,6 +46,7 @@ openssl rand -hex 32
 | `BCRYPT_ROUNDS`     | No       | bcrypt cost factor (default: `10`; tests use `4`).                                 |
 | `CORS_ORIGINS`      | No       | Comma-separated list of allowed browser origins. Defaults to local Vite origins.   |
 | `FRONTEND_URL`      | No       | Base URL used in password-reset emails (default: `http://localhost:5173`).         |
+| `DOCS_ENABLED`      | No       | Serves Swagger UI at `/api/v1/docs` (default: `true`; set to `false` to disable).  |
 | `RESEND_API_KEY`    | No       | Resend API key. If omitted, reset email delivery is disabled with a warning.       |
 | `FROM_EMAIL`        | No       | Verified sender address for password-reset emails.                                 |
 | `ADMIN_PHONE`       | Seed     | Admin phone used by `npm run db:seed`.                                             |
@@ -73,6 +74,17 @@ The API is available at `http://localhost:3000`. Verify it is running:
 curl http://localhost:3000/api/v1/health
 ```
 
+### API documentation
+
+Swagger UI is served from `/api/v1/docs`, and the raw OpenAPI 3.1 description
+from `/api/v1/openapi.json`:
+
+- Local: <http://localhost:3000/api/v1/docs>
+- Render: `https://<your-service>.onrender.com/api/v1/docs`
+
+Set `DOCS_ENABLED=false` to disable both routes. The documentation is generated
+from `docs/openapi.yaml`; validate changes with `npm run docs:lint`.
+
 To seed the category and area catalog plus an admin account:
 
 ```bash
@@ -94,6 +106,7 @@ The seed is idempotent.
 | `npm run db:studio`    | Open Prisma Studio                           |
 | `npm run db:reset`     | Reset the database (development only)        |
 | `npm test`             | Run unit and integration tests               |
+| `npm run docs:lint`    | Validate the OpenAPI description             |
 | `npm run lint`         | Run ESLint                                   |
 | `npm run format`       | Format the codebase with Prettier            |
 | `npm run format:check` | Check formatting without modifying files     |
@@ -242,6 +255,8 @@ npm run format
 - Point a monitor at `/api/v1/health` and keep `LOG_LEVEL=info`. The
   authorization header and cookies are redacted, and the error middleware logs
   only 5xx responses.
+- Interactive API documentation is available at `/api/v1/docs` after deploy.
+  Keep `DOCS_ENABLED=true` unless you want to hide the docs in production.
 - Expect `SIGTERM` and `SIGINT` to close the HTTP server and disconnect Prisma
   within 10 seconds.
 
@@ -256,6 +271,7 @@ src/services/          Business rules, transactions, email, and lockout
 src/repositories/      Prisma data access
 src/validation/        Zod request schemas
 src/middleware/        Authentication, validation, rate limits, and errors
+docs/                  OpenAPI 3.1 description served by Swagger UI
 prisma/                Schema, migrations, and seed
 tests/                 Unit tests with the Node.js test runner and Supertest integration tests
 ```

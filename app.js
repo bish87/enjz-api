@@ -15,6 +15,7 @@ import areaRouter from "./src/routes/area.routes.js";
 import authRoutes from "./src/routes/auth.routes.js";
 import bookingRouter from "./src/routes/booking.routes.js";
 import categoryRouter from "./src/routes/category.routes.js";
+import docsRouter from "./src/routes/docs.routes.js";
 import healthRouter from "./src/routes/health.routes.js";
 import providerRouter from "./src/routes/provider.routes.js";
 import userRouter from "./src/routes/user.routes.js";
@@ -26,6 +27,26 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
 app.use(helmet());
+if (env.DOCS_ENABLED) {
+  // Swagger UI ships inline scripts and styles that Helmet's default CSP blocks.
+  app.use(
+    "/api/v1/docs",
+    helmet.contentSecurityPolicy({
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+      },
+    })
+  );
+}
 app.use(
   cors({
     origin: corsOrigin,
@@ -47,6 +68,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "1mb" }));
+app.use("/api/v1", docsRouter);
 app.use(globalLimiter);
 
 app.use("/api/v1/health", healthRouter);

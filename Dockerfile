@@ -29,6 +29,7 @@ COPY --from=production-deps --chown=node:node /app/package*.json ./
 COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=production-deps --chown=node:node /app/generated ./generated
 COPY --from=build --chown=node:node /app/src ./src
+COPY --from=build --chown=node:node /app/docs ./docs
 COPY --from=build --chown=node:node /app/app.js ./
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/prisma7.config.js ./

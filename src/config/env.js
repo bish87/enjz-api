@@ -24,6 +24,10 @@ const envSchema = z.object({
         .filter(Boolean)
     ),
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+  DOCS_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   RESEND_API_KEY: z
     .string()
     .optional()
